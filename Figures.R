@@ -1,4 +1,4 @@
-#### Script to reproduce the figures of the manuscript  "Rechsteiner M. et al. Host resistance and pathogen aggressiveness vary along an elevation gradient in a wild plant-pathogen system" ####
+#### Script to reproduce the figures of the manuscript  "Rechsteiner M. et al. Host resistance and pathogen aggressiveness vary along an elevation gradient in a wild plant-pathogen interaction" ####
 #### required libraries/packages ####
 require(ggplot2)
 require(ggpubr)

@@ -1,5 +1,5 @@
 # AnalysisInfectionExperiment
-R scripts and data to reproduce figures and analyses from the manuscript  "Rechsteiner M. et al. Host resistance and pathogen aggressiveness vary along an elevation gradient in a wild plant-pathogen system"
+R scripts and data to reproduce figures and analyses from the manuscript  "Rechsteiner M. et al. Host resistance and pathogen aggressiveness vary along an elevation gradient in a wild plant-pathogen interaction
 
 Script Figures.R will produce unedited figures 1C, 1D, 2, 3 and 4, as well as Supplementary Figures 1 and 2.
 Script StatisticalAnalysis.R will produce unedited Table 1 and 2, as well as Supplementary Tables 1-14.

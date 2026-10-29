@@ -1,4 +1,4 @@
-#### Script to reproduce the statistical analyses performed in the manuscript "Rechsteiner M. et al. Host resistance and pathogen aggressiveness vary along an elevation gradient in a wild plant-pathogen system" ####
+#### Script to reproduce the statistical analyses performed in the manuscript "Rechsteiner M. et al. Host resistance and pathogen aggressiveness vary along an elevation gradient in a wild plant-pathogen interaction" ####
 #### required libraries/packages ####
 require(tidyverse)
 require(lme4)
