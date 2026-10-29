@@ -1,14 +1,17 @@
-#### Script to reproduce the figures of the manuscript "Patterns of local adaptation reverse along an elevation gradient in a wild plant-pathogen system" ####
+#### Script to reproduce the figures of the manuscript  "Rechsteiner M. et al. Host resistance and pathogen aggressiveness vary along an elevation gradient in a wild plant-pathogen system" ####
 #### required libraries/packages ####
-library(ggplot2)
-library(ggpubr)
-library(tidyverse)
+require(ggplot2)
+require(ggpubr)
+require(tidyverse)
 require(argparser)
 require(lme4)
-require("ggmosaic")
+require(ggmosaic)
+require(Hmisc)
+require(ggpubr)
 #### Set up argparser for command line to read in data and to set the output directory for tables####
-## Insert the whole file paths under default in this script or add the file paths after the corresponding arguments
-args <- arg_parser(description="Parser to analyse data for the manuscript 'Patterns of local adaptation reverse along elevation in a wild plant-pathogen interaction'")
+## Insert the whole file paths under default in this script, or set the working directory accordingly, or lastly, add the file paths after the corresponding arguments when executing this R script from the command line.
+
+args <- arg_parser(description="Parser to analyse data for the manuscript 'Host resistance and pathogen aggressiveness vary along an elevation gradient in a wild plant-pathogen system'")
 args <- add_argument(args,"--InfectionSeverityFile", default="InfectionSeverityData.csv", help="Infection severity file",type="character")
 args <- add_argument(args,"--SporulationFile", default="SporulationTimeData.csv", help="Sporulation time file",type="character")
 args <- add_argument(args,"--ChasmotheciaFile", default="ChasmotheciaData.csv", help="Chasmothecia file",type="character")
@@ -39,69 +42,184 @@ PlantAbundance_Analysis <- read.csv(PlantAbundanceFile,stringsAsFactors = T)
 ##
 PathogenAbundance_Analysis <- read.csv(PathogenAbundanceFile,stringsAsFactors = T)
 
-#### Figures ####
-#### Plant and pathogen abundance, Figure 1C and 1D ####
-PlantAbundance_Analysis$Population <- factor(PlantAbundance_Analysis$Population, levels = c("Low","Mid-low","Mid-high","High"))
-PlantAbundance_Analysis$Season <- as.factor(PlantAbundance_Analysis$Season)
-
-PathogenAbundance_Analysis$Population <- factor(PathogenAbundance_Analysis$Population, levels = c("Low","Mid-low","Mid-high","High"))
-PathogenAbundance_Analysis$Season <- as.factor(PathogenAbundance_Analysis$Season)
-PathogenAbundance_Analysis$LNInfected.plants <- log(PathogenAbundance_Analysis$Infected.plants)
-
 JoinedAbundance <- merge(PlantAbundance_Analysis, PathogenAbundance_Analysis, by = c("Season","Population","Elevation","Site"))
+JoinedAbundance$Population <- factor(JoinedAbundance$Population, levels = c("High","Mid-high","Mid-low","Low"))
+JoinedAbundance$Season <- factor(JoinedAbundance$Season, levels = c("2019","2020","2021"))
 
-## Run regression models to add to the data plots
-# create mixed linear model
-# lmer_fit_plantago <- lmer(Plantago.lanceolata~Elevation + (1|Season), data=PlantAbundance_Analysis)
-# summary(lmer_fit_plantago)
-# lmer_fit_pathogen <- lmer(Infection.aggregates~Plantago.lanceolata+Elevation + (1|Season), data=JoinedAbundance)
-# summary(lmer_fit_pathogen)
-# lmer_fit_pathogen2 <- lmer(Infection.aggregates~Elevation + (1|Season), data=JoinedAbundance)
-# summary(lmer_fit_pathogen)
+#### Figures ####
+#### Host density and pathogen prevalence, Figure 1C and 1D ####
+JoinedAbundance$HostDensity <- JoinedAbundance$Plantago.lanceolata/36
+JoinedAbundance$Hosts_per_2500m2 <- round(JoinedAbundance$HostDensity*2500)
+JoinedAbundance$Prevalence<- (JoinedAbundance$Infected.plants/JoinedAbundance$Hosts_per_2500m2)*100
 
-# add predictions of the model in the existing data frame 
-# PlantAbundance_Analysis <- PlantAbundance_Analysis %>% 
-#   mutate(fit.m = predict(lmer_fit_plantago, re.form = NA), # marginal fit (only fixed effect)
-#          fit.c = predict(lmer_fit_plantago, re.form = NULL), # conditional fir (fixed and random effect)
-#          resid = resid(lmer_fit_plantago))
-# 
-# PathogenAbundance_Analysis <- JoinedAbundance %>% 
-#   mutate(fit.m = predict(lmer_fit_pathogen, re.form = NA),
-#          fit.c = predict(lmer_fit_pathogen, re.form = NULL),
-#          resid = resid(lmer_fit_pathogen))
 
-#### Plots
+summary_stats <- JoinedAbundance %>%
+  group_by(Population, Season) %>%
+  summarise(
+    mean_average_Plan   = mean(HostDensity, na.rm = TRUE),
+    se_average_Plan     = sd(HostDensity, na.rm = TRUE) / sqrt(n()),
+    mean_elevation = mean(Elevation, na.rm = TRUE),
+    n_sites        = n(),
+    .groups = "drop"
+  )
 
-PlantAbundance_plot <- PlantAbundance_Analysis %>%
-  ggplot(aes(x = Elevation, y = Plantago.lanceolata)) +geom_point(aes(shape = Season, color = Population), size = 3)+
-  # geom_line(aes(y = fit.c, linetype = Season), size = 2)+
-  scale_color_manual(values = c("#E11919","#EFA1A1","#8EA6CF","#184CA1")) +
-  scale_linetype_manual(values = c("dotted", "longdash","solid"))+
-  ylab("Number of plants") +
-  xlab("Meters above sea level")+
-  # ggtitle("Plantago lanceolata density\non Calanda from 2019-2021")+
-  theme_classic()+
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"), text = element_text(size = 20),legend.key.width=unit(5,"cm")) +
+elev_range <- diff(range(PlantAbundance_Analysis$Elevation, na.rm = TRUE))
+step <- elev_range * 0.04
+
+summary_stats <- summary_stats %>%
+  mutate(
+    season_offset = case_when(
+      Season == levels(Season)[1] ~ -step,
+      Season == levels(Season)[2] ~ 0,
+      Season == levels(Season)[3] ~ step,
+      TRUE ~ 0
+    ),
+    Elevation_jit = mean_elevation + season_offset
+  )
+
+PlantAbundance_plot <- JoinedAbundance %>%
+  ggplot(aes(x = Elevation, y = HostDensity)) +
+  geom_point(aes(shape = Season, color = Population), size = 2.5, stroke = 1, alpha = 0.4)+
+  scale_shape_manual(values = c(0, 5, 2))  +
+  #scale_color_manual(values = c("#E11919","#EFA1A1","#8EA6CF","#184CA1")) +
+  scale_color_manual(values = c("#184CA1","#8EA6CF","#EFA1A1","#E11919")) +
+  scale_linetype_manual(values = c("dotted", "longdash","solid")) +
+  ylab("Individuals per m2") +
+  xlab("Elevation [m.a.s.l.]") +
+  theme_classic() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", colour = alpha("black", 1)),
+    text = element_text(size = 20, colour = alpha("black", 1)),
+    axis.text.x = element_text(colour = alpha("black", 1)),
+    axis.text.y = element_text(colour = alpha("black", 1)),
+    legend.key.width = unit(5,"cm"),
+    legend.position = "none"
+  ) +
   guides(color = guide_legend(override.aes = list(size = 7.5))) +
   guides(shape = guide_legend(override.aes = list(size = 7.5)))
-pdf(paste0(outdir,"/PlantAbundance.pdf"),width=10,height=7.5)
-print(PlantAbundance_plot)
+
+PlantAbundance_plot <- PlantAbundance_plot +
+  geom_errorbar(
+    data = summary_stats,
+    aes(x = Elevation_jit, y = mean_average_Plan,
+        ymin = mean_average_Plan - se_average_Plan, ymax = mean_average_Plan + se_average_Plan,
+        color = Population),
+    width = 0, linewidth = 1.5, inherit.aes = FALSE
+  ) +
+  geom_point(
+    data = summary_stats,
+    aes(x = Elevation_jit, y = mean_average_Plan, shape = Season, color = Population),
+    size = 6, stroke = 2, inherit.aes = FALSE
+  )
+
+### Prevalence plots
+
+summary_stats <- JoinedAbundance %>%
+  group_by(Population, Season) %>%
+  summarise(
+    mean_Prevalence   = mean(Prevalence, na.rm = TRUE),
+    se_Prevalence     = sd(Prevalence, na.rm = TRUE) / sqrt(n()),
+    mean_elevation = mean(Elevation, na.rm = TRUE),
+    n_sites        = n(),
+    .groups = "drop"
+  )
+
+elev_range <- diff(range(JoinedAbundance$Elevation, na.rm = TRUE))
+step <- elev_range * 0.04
+
+summary_stats <- summary_stats %>%
+  mutate(
+    season_offset = case_when(
+      Season == levels(Season)[1] ~ -step,
+      Season == levels(Season)[2] ~ 0,
+      Season == levels(Season)[3] ~ step,
+      TRUE ~ 0
+    ),
+    Elevation_jit = mean_elevation + season_offset
+  )
+
+Prevalence_plot_woOutl <- JoinedAbundance %>%
+  ggplot(aes(x = Elevation, y = Prevalence)) +
+  geom_point(aes(shape = Season, color = Population), size = 2.5, stroke = 1, alpha = 0.4)+
+  scale_shape_manual(values = c(0, 5, 2))  +
+  # scale_color_manual(values = c("#E11919","#EFA1A1","#8EA6CF","#184CA1")) +
+  scale_color_manual(values = c("#184CA1","#8EA6CF","#EFA1A1","#E11919")) +
+  scale_linetype_manual(values = c("dotted", "longdash","solid")) +
+  ylab("Percentage of diseased plants") +
+  xlab("Elevation [m.a.s.l.]") +
+  theme_classic() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", colour = alpha("black", 1)),
+    text = element_text(size = 20, colour = alpha("black", 1)),
+    axis.text.x = element_text(colour = alpha("black", 1)),
+    axis.text.y = element_text(colour = alpha("black", 1)),
+    legend.key.width = unit(5,"cm"),
+    legend.position = "none"
+  ) +
+  ylim(0,2.5)+
+  guides(color = guide_legend(override.aes = list(size = 7.5))) +
+  guides(shape = guide_legend(override.aes = list(size = 7.5)))
+
+Prevalence_plot_woOutl <- Prevalence_plot_woOutl +
+  geom_errorbar(
+    data = summary_stats,
+    aes(x = Elevation_jit, y = mean_Prevalence,
+        ymin = mean_Prevalence - se_Prevalence, ymax = mean_Prevalence + se_Prevalence,
+        color = Population),
+    width = 0, linewidth = 1.5, inherit.aes = FALSE
+  ) +
+  geom_point(
+    data = summary_stats,
+    aes(x = Elevation_jit, y = mean_Prevalence, shape = Season, color = Population),
+    size = 6, stroke = 2, inherit.aes = FALSE
+  )
+
+Prevalence_plot_Outl <- JoinedAbundance %>%
+  ggplot(aes(x = Elevation, y = Prevalence)) +
+  geom_point(aes(shape = Season, color = Population), size = 2.5, stroke = 1, alpha = 0.4)+
+  scale_shape_manual(values = c(0, 5, 2))  +
+  #scale_color_manual(values = c("#E11919","#EFA1A1","#8EA6CF","#184CA1")) +
+  scale_color_manual(values = c("#184CA1","#8EA6CF","#EFA1A1","#E11919")) +
+  scale_linetype_manual(values = c("dotted", "longdash","solid")) +
+  ylab("Percentage of diseased plants") +
+  xlab("Elevation [m.a.s.l.]") +
+  theme_classic() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", colour = alpha("black", 1)),
+    text = element_text(size = 20, colour = alpha("black", 1)),
+    axis.text.x = element_text(colour = alpha("black", 1)),
+    axis.text.y = element_text(colour = alpha("black", 1)),
+    legend.key.width = unit(5,"cm"),
+    legend.position = "none"
+  ) +
+  ylim(3.5,6)+
+  guides(color = guide_legend(override.aes = list(size = 7.5))) +
+  guides(shape = guide_legend(override.aes = list(size = 7.5)))
+
+Prevalence_plot_Outl <- Prevalence_plot_Outl +
+  geom_errorbar(
+    data = summary_stats,
+    aes(x = Elevation_jit, y = mean_Prevalence,
+        ymin = mean_Prevalence - se_Prevalence, ymax = mean_Prevalence + se_Prevalence,
+        color = Population),
+    width = 0, linewidth = 1.5, inherit.aes = FALSE
+  ) +
+  geom_point(
+    data = summary_stats,
+    aes(x = Elevation_jit, y = mean_Prevalence, shape = Season, color = Population),
+    size = 6, stroke = 2, inherit.aes = FALSE
+  )
+
+pdf(paste0(outdir,"/Figure1D.1.pdf"),width=5,height=5)
+print(Prevalence_plot_Outl)
 dev.off()
 
-PathogenAbundance_plot <- PathogenAbundance_Analysis %>%
-  ggplot(aes(x = Elevation, y = LNInfected.plants)) +geom_point(aes(shape = Season, color = Population), size = 3)+
-  # geom_line(aes(y = fit.c, linetype = Season), size = 2)+
-  scale_color_manual(values = c("#E11919","#EFA1A1","#8EA6CF","#184CA1")) +
-  scale_linetype_manual(values = c("dotted", "longdash","solid"))+
-  ylab("ln(Number of infected plants)") +
-  xlab("Meters above sea level")+
-  # ggtitle("Infected plants\non Calanda from 2019-2021")+
-  theme_classic()+
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"), text = element_text(size = 20),legend.key.width=unit(5,"cm")) +
-  guides(color = guide_legend(override.aes = list(size = 7.5))) +
-  guides(shape = guide_legend(override.aes = list(size = 7.5)))
-pdf(paste0(outdir,"/PathogenAbundance.pdf"),width=10,height=7.5)
-print(PathogenAbundance_plot)
+pdf(paste0(outdir,"/Figure1D.2.pdf"),width=5,height=5)
+print(Prevalence_plot_woOutl)
+dev.off()
+
+pdf(paste0(outdir,"/Figure1C.pdf"),width=5,height=5)
+print(PlantAbundance_plot)
 dev.off()
 
 #### Infection Matrix, Figure 2 ####
@@ -113,7 +231,6 @@ Infection_Severity_Analysis$Plant.genotype <- factor(Infection_Severity_Analysis
 Infection_Severity_Analysis$Pathogen.isolate <- factor(Infection_Severity_Analysis$Pathogen.isolate, levels = c("U1M1","O4M2","O4M1","N5M1","N4M1","A5M2","A6M2","A5M3","A1M2","I5M2","I5M1"))
 Infection_Severity_Analysis$Pathogen.isolate <- factor(Infection_Severity_Analysis$Pathogen.isolate, levels = c("I5M1","I5M2","A1M2","A5M3","A6M2","A5M2","N4M1","N5M1","O4M1","O4M2","U1M1"))
 
-#### Mean Bevan scores day 12
 MeanBevanBlock12Day12PI <- Infection_Severity_Analysis %>% group_by(Plant.genotype,Pathogen.isolate,Host.population,Pathogen.population,Geography) %>% summarise(Bevan.mean=mean(Bevan.Score)) %>%
   ggplot( aes(Plant.genotype,Pathogen.isolate, fill = Bevan.mean)) +
   theme_void() +
@@ -124,7 +241,7 @@ MeanBevanBlock12Day12PI <- Infection_Severity_Analysis %>% group_by(Plant.genoty
   labs(fill="Infection score")+
   theme(axis.text.x = element_text(angle = 45, hjust=1), axis.text.y= element_text(hjust=1),text = element_text(size = 10),plot.margin = unit(c(1,1,1,1), "cm"))
 
-pdf(paste0(outdir,"/MeanBevanBlock12Day12PI.pdf"),width=15,height=5)
+pdf(paste0(outdir,"/Figure2.pdf"),width=15,height=5)
 print(MeanBevanBlock12Day12PI)
 dev.off()
 
@@ -138,10 +255,10 @@ Infection_Status_plot <- Infection_Severity_Analysis %>%
   mutate(Host.population = fct_relevel(Host.population, c("Low","Mid-low","Mid-high","High")),
          Pathogen.population = fct_relevel(Pathogen.population, c("Low","Mid-low","Mid-high","High")))
 
-pdf(paste0(outdir,"/Infection.status.pdf"),width=10,height=5)
+pdf(paste0(outdir,"/Figure3.pdf"),width=10,height=5)
 Infection_Status_plot %>%
   ggplot(mapping=aes(x=Pathogen.population:Host.population, y = Infection, fill = Pathogen.population:Host.population), width = 4) + 
-  scale_fill_manual(values=c("grey25",rep("grey70",4),"grey25",rep("grey70",4),"grey25",rep("grey70",4),"grey25"))+
+  scale_fill_manual(values=c(rep("grey70",16)))+
   stat_summary(fun.data=mean_sdl, geom="bar", width = 0.6)+
   ylim(0,1)+
   ylab("Proportion infected hosts")+
@@ -152,6 +269,7 @@ Infection_Status_plot %>%
   theme(plot.title = element_text(hjust = 0.5,face = "bold"),text = element_text(size=20),legend.position="none",axis.text.x = element_text(angle = 30,hjust=1))+
   stat_summary(fun.data=mean_cl_boot, geom="errorbar", width=0.3)
 dev.off()
+
 #### Infection Severity, Figure 4 ####
 Infection_Severity_plot <- Infection_Severity_Analysis %>% 
   # Prepare variables for analysis
@@ -159,40 +277,23 @@ Infection_Severity_plot <- Infection_Severity_Analysis %>%
          Block=as.factor(Block)) %>%
   filter(Bevan.Score >0) %>%
   mutate(Host.population = fct_relevel(Host.population, c("Low","Mid-low","Mid-high","High")),
-         Pathogen.population = fct_relevel(Pathogen.population, c("Low","Mid-low","Mid-high","High")))
-
-pdf(paste0(outdir,"/Infection.severity.pdf"),width=10,height=5)
-ggplot(Infection_Severity_plot, aes(fill=Bevan.Cat, x = Host.population:Pathogen.population)) + 
-  geom_bar(position="fill", width = 0.8)+ theme_classic()+ theme(axis.text.x = element_text(angle = 60, vjust = 0.5, hjust=0.5))+scale_fill_manual(values=c("#C6C6C6","#ABACAC","#737373","#565656","#333334"))
-dev.off()
-
-Infection_Severity_plot <- Infection_Severity_Analysis %>% 
-  # Prepare variables for analysis
-  mutate(Bevan.Cat=as.factor(Bevan.Score),
-         Block=as.factor(Block)) %>%
-  filter(Bevan.Score >0) %>%
-  mutate(Host.population = fct_relevel(Host.population, c("Low","Mid-low","Mid-high","High")),
          Pathogen.population = fct_relevel(Pathogen.population, c("Low","Mid-low","Mid-high","High"))) %>%
-  group_by(Host.population, Pathogen.population, Bevan.Cat) %>%
-  summarise(Count = n()) %>%
-  ungroup() %>%
-  group_by(Host.population, Pathogen.population) %>%
-  mutate(Frequency = Count / sum(Count)) %>%
-  ungroup()
+  mutate(Bevan.final = case_when(
+    Bevan.Cat == "0" ~ "0",
+    Bevan.Cat == "1" ~ "1",
+    Bevan.Cat == "1.5" ~ "2",
+    Bevan.Cat == "2.5" ~ "3",
+    Bevan.Cat == "3" ~ "4",
+    Bevan.Cat == "4" ~ "5"
+  )) %>%
+  #mutate(Bevan.final = factor(Bevan.final, levels = c("0","1","2","3","4","5")))
+  mutate(Bevan.final = factor(Bevan.final, levels = c("5","4","3","2","1","0")))
 
-# Create the mosaic plot
-Infection_Severity_plot<- droplevels(Infection_Severity_plot)
-Colors1 = c("#D2D2D2" ,"#BDBEBE","#929292","#7D7D7D","#5C5C5C")
-Colors2 = c("#C6C6C6","#ABACAC","#737373","#565656","#333334")
-
-pdf(paste0(outdir,"/Infection.severity.matrix.pdf"),width=10,height=5)
-Infection_Severity_plot %>% ggplot() +
-  geom_mosaic(aes(weight = Frequency, x = product(Host.population, Pathogen.population), fill = Bevan.Cat), alpha = 1, width = 0.5) +
-  labs(title = "Mosaic Plot of Infection Severity Frequencies",
-       x = "Host and Pathogen Populations",
-       y = "Host") +
-  theme_classic()+scale_fill_manual(values= Colors2)
+pdf(paste0(outdir,"/Figure4.pdf"),width=10,height=5)
+ggplot(Infection_Severity_plot, aes(fill=Bevan.final, x = Host.population:Pathogen.population)) + 
+  geom_bar(position="fill", width = 0.8)+ theme_classic()+ theme(axis.text.x = element_text(angle = 60, vjust = 0.5, hjust=0.5))+scale_fill_manual(values = c("#333334","#565656","#737373","#ABACAC","#C6C6C6"))
 dev.off()
+
 #### Days per sporulation, Supp. Figure 1 ####
 filtered_data <- Days_to_spore_Analysis %>%
   filter(Host.population == "Low") %>%
@@ -202,8 +303,8 @@ mean_data <- filtered_data %>%
   summarise(Sporulation.time.mean = mean(Sporulation.time))
 overall_mean <- mean(mean_data$Sporulation.time.mean)
 plot <- ggplot(data = filtered_data, aes(x = Pathogen.population, y =Sporulation.time, fill = Geography)) + 
-  stat_summary(fun.data = mean_cl_boot, geom = "linerange", size = 2, color = c("grey70", "grey70", "grey70", "grey25")) +
-  stat_summary(fun.y = mean, geom = "point", pch = 19, size = 7, color = c("grey70", "grey70", "grey70", "grey25")) +
+  stat_summary(fun.data = mean_cl_boot, geom = "linerange", size = 2, color = c("grey70", "grey70", "grey70", "grey70")) +
+  stat_summary(fun.y = mean, geom = "point", pch = 19, size = 7, color = c("grey70", "grey70", "grey70", "grey70")) +
   ylab("Sporulation time") +
   xlab("Pathogen population") +
   theme_minimal() +
@@ -226,8 +327,8 @@ mean_data <- filtered_data %>%
   summarise(Sporulation.time.mean = mean(Sporulation.time))
 overall_mean <- mean(mean_data$Sporulation.time.mean)
 plot <- ggplot(data = filtered_data, aes(x = Pathogen.population, y =Sporulation.time, fill = Geography)) + 
-  stat_summary(fun.data = mean_cl_boot, geom = "linerange", size = 2, color = c("grey70", "grey70", "grey70", "grey25")) +
-  stat_summary(fun.y = mean, geom = "point", pch = 19, size = 7, color = c("grey70", "grey70", "grey70", "grey25")) +
+  stat_summary(fun.data = mean_cl_boot, geom = "linerange", size = 2, color = c("grey70", "grey70", "grey70", "grey70")) +
+  stat_summary(fun.y = mean, geom = "point", pch = 19, size = 7, color = c("grey70", "grey70", "grey70", "grey70")) +
   ylab("") +
   xlab("Pathogen population") +
   theme_minimal() +
@@ -250,8 +351,8 @@ mean_data <- filtered_data %>%
   summarise(Sporulation.time.mean = mean(Sporulation.time))
 overall_mean <- mean(mean_data$Sporulation.time.mean)
 plot <- ggplot(data = filtered_data, aes(x = Pathogen.population, y =Sporulation.time, fill = Geography)) + 
-  stat_summary(fun.data = mean_cl_boot, geom = "linerange", size = 2, color = c("grey70", "grey70", "grey70", "grey25")) +
-  stat_summary(fun.y = mean, geom = "point", pch = 19, size = 7, color = c("grey70", "grey70", "grey70", "grey25")) +
+  stat_summary(fun.data = mean_cl_boot, geom = "linerange", size = 2, color = c("grey70", "grey70", "grey70", "grey70")) +
+  stat_summary(fun.y = mean, geom = "point", pch = 19, size = 7, color = c("grey70", "grey70", "grey70", "grey70")) +
   ylab("") +
   xlab("Pathogen population") +
   theme_minimal() +
@@ -274,8 +375,8 @@ mean_data <- filtered_data %>%
   summarise(Sporulation.time.mean = mean(Sporulation.time))
 overall_mean <- mean(mean_data$Sporulation.time.mean)
 plot <- ggplot(data = filtered_data, aes(x = Pathogen.population, y =Sporulation.time, fill = Geography)) + 
-  stat_summary(fun.data = mean_cl_boot, geom = "linerange", size = 2, color = c("grey70", "grey70", "grey70", "grey25")) +
-  stat_summary(fun.y = mean, geom = "point", pch = 19, size = 7, color = c("grey70", "grey70", "grey70", "grey25")) +
+  stat_summary(fun.data = mean_cl_boot, geom = "linerange", size = 2, color = c("grey70", "grey70", "grey70", "grey70")) +
+  stat_summary(fun.y = mean, geom = "point", pch = 19, size = 7, color = c("grey70", "grey70", "grey70", "grey70")) +
   ylab("") +
   xlab("Pathogen population") +
   theme_minimal() +
@@ -289,7 +390,7 @@ plot <- ggplot(data = filtered_data, aes(x = Pathogen.population, y =Sporulation
 OU_plot <- plot + 
   geom_hline(yintercept = overall_mean, line,  linetype = "dashed",color = "red", size = 1)
 
-pdf(paste0(outdir,"/Sporulation.time.pdf"),width=15,height=5)
+pdf(paste0(outdir,"/SupplementaryFigure1.pdf"),width=15,height=5)
 ggarrange(I_plot,A_plot,N_plot,OU_plot, ncol = 4, nrow = 1,labels = c("", "", "", ""))
 dev.off()
 
@@ -298,24 +399,9 @@ Chasmothecia_plot <- Chasmothecia_Analysis %>%
   mutate(Host.population = fct_relevel(Host.population, c("Low","Mid-low","Mid-high","High")),
          Pathogen.population = fct_relevel(Pathogen.population, c("Low","Mid-low","Mid-high","High")))
 
-pdf(paste0(outdir,"/Chasmothecia.pdf"),width=15,height=5)
+pdf(paste0(outdir,"/SupplementaryFigure2.pdf"),width=10,height=5)
 Chasmothecia_plot %>%
-  ggplot(mapping=aes(x=Host.population:Pathogen.population, y = Chasmothecia, fill = Host.population:Pathogen.population), width = 4) + 
-  scale_fill_manual(values=c("grey25",rep("grey70",4),"grey25",rep("grey70",4),"grey25",rep("grey70",4),"grey25"))+
-  stat_summary(fun.data=mean_sdl, geom="bar", width = 0.6)+
-  ylim(0,1)+
-  ylab("Proportion")+
-  xlab("")+
-  theme_classic()+
-  theme(legend.position="none") + 
-  ggtitle("Proportion of infections \n developing chasmothecia")+
-  theme(plot.title = element_text(hjust = 0.5,face = "bold"),text = element_text(size=25),legend.position="none",axis.text.x = element_text(angle = 30,hjust=1))+
-  stat_summary(fun.data=mean_cl_boot, geom="errorbar", width=0.3)
-dev.off()
-
-pdf(paste0(outdir,"/Chasmothecia.pdf"),width=10,height=5)
-Chasmothecia_plot %>%
-  ggplot(mapping=aes(x=Host.population, y = Chasmothecia, fill = Pathogen.population), width = 2) + 
+  ggplot(mapping=aes(x=Host.population, y = Chasmothecia, fill = Pathogen.population)) + 
   scale_fill_manual(values=c(rep("grey70",4)))+
   stat_summary(fun.data=mean_sdl, geom="bar", width = 0.6,position = position_dodge(width = 0.7))+
   ylim(0,1)+
@@ -328,4 +414,4 @@ Chasmothecia_plot %>%
   stat_summary(fun.data=mean_cl_boot, geom="errorbar", width=0.3,position = position_dodge(width = 0.7))
 dev.off()
 
-#### Figures were further edited using Adobe Illustrator
+#### Figures were further edited using Inkscape/Adobe Illustrator ####
