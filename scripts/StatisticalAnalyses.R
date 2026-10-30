@@ -15,12 +15,12 @@ require(stringr)
 #### Set up argparser for command line to read in data and to set the output directory for tables####
 ## Insert the whole file paths under default in this script or add the file paths after the corresponding arguments
 args <- arg_parser(description="Parser to analyse data for the manuscript 'Host resistance and pathogen aggressiveness vary along an elevation gradient in a wild plant-pathogen system'")
-args <- add_argument(args,"--InfectionSeverityFile", default="InfectionSeverityData.csv", help="Infection severity file",type="character")
-args <- add_argument(args,"--SporulationFile", default="SporulationTimeData.csv", help="Sporulation time file",type="character")
-args <- add_argument(args,"--ChasmotheciaFile", default="ChasmotheciaData.csv", help="Chasmothecia file",type="character")
+args <- add_argument(args,"--InfectionSeverityFile", default="data/InfectionSeverityData.csv", help="Infection severity file",type="character")
+args <- add_argument(args,"--SporulationFile", default="data/SporulationTimeData.csv", help="Sporulation time file",type="character")
+args <- add_argument(args,"--ChasmotheciaFile", default="data/ChasmotheciaData.csv", help="Chasmothecia file",type="character")
 args <- add_argument(args,"--outdir", default="", help="Set output directory for result tables",type="character")
-args <- add_argument(args,"--PlantAbundanceFile", default="PLLAAbundanceData.csv", help="Plant abundance file",type="character")
-args <- add_argument(args,"--PathogenAbundanceFile", default="MildewAbundanceData.csv", help="Pathogen abundance file",type="character")
+args <- add_argument(args,"--PlantAbundanceFile", default="data/PLLAAbundanceData.csv", help="Plant abundance file",type="character")
+args <- add_argument(args,"--PathogenAbundanceFile", default="data/MildewAbundanceData.csv", help="Pathogen abundance file",type="character")
 
 # Parse the command line arguments
 pargs <- parse_args(args)
