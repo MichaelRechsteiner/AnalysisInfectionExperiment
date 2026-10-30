@@ -2,7 +2,7 @@ Sanger sequencing data of ITS dna barcodes used in the manuscript "Rechsteiner M
 
 Details on sampling location, sampling date, and laboratory protocols are described in the manuscript.
 
-File tree:\
+File tree:
 ```
 its-sanger-powdery-mildew/
 ├── chromatograms
