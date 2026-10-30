@@ -9,3 +9,5 @@ Rscript scripts/StatisticalAnalyses.R --outdir "$WhereYouWantTheTables"\
 Rscript scripts/Figures.R --outdir "$WhereYouWantTheFigures"
 
 The file sessionInfo.txt contains a snapshot of the R evironment where the analyses were carried out.
+
+The folder data/its-sanger-powdery-mildew/ contains Sanger sequencing data of 11 ITS amplicons from the experimental fungal isolates.
